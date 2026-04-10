@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Download — Local AI Agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --card: #1c2128;
+      --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+      --accent: #58a6ff; --accent-hover: #79c0ff;
+      --success: #3fb950; --error: #f85149;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
+    .container { max-width: 640px; margin: 0 auto; padding: 40px 20px; }
+    .hero { text-align: center; margin-bottom: 32px; }
+    .hero .icon { font-size: 48px; margin-bottom: 12px; }
+    .hero h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+    .hero p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; margin-bottom: 16px;
+    }
+    .card h3 { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .detected {
+      text-align: center; padding: 20px 0; margin-bottom: 20px;
+    }
+    .detected .label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+    .detected .platform { font-size: 18px; font-weight: 700; }
+    .btn-download {
+      display: block; width: 100%; padding: 14px 20px;
+      background: var(--accent); color: #fff; border: none;
+      border-radius: 10px; font-size: 15px; font-weight: 700;
+      font-family: var(--sans); cursor: pointer;
+      text-align: center; text-decoration: none;
+      transition: background 0.15s;
+    }
+    .btn-download:hover { background: var(--accent-hover); }
+    .btn-download:active { transform: scale(0.98); }
+    .all-downloads { margin-top: 20px; }
+    .dl-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 14px; border-radius: 8px; margin-bottom: 6px;
+      background: var(--card); font-size: 13px;
+    }
+    .dl-row .info { display: flex; flex-direction: column; }
+    .dl-row .os-name { font-weight: 600; }
+    .dl-row .arch { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .dl-row a {
+      color: var(--accent); text-decoration: none; font-weight: 600; font-size: 12px;
+      padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px;
+      transition: all 0.15s;
+    }
+    .dl-row a:hover { border-color: var(--accent); background: #58a6ff11; }
+    .instructions {
+      margin-top: 20px; padding: 16px; border-radius: 8px;
+      background: var(--card); font-size: 13px; line-height: 1.7;
+    }
+    .instructions code {
+      background: #30363d; padding: 2px 6px; border-radius: 4px;
+      font-family: var(--mono); font-size: 12px;
+    }
+    .instructions pre {
+      background: #30363d; padding: 12px 16px; border-radius: 8px;
+      font-family: var(--mono); font-size: 12px; overflow-x: auto;
+      margin: 8px 0; line-height: 1.6;
+    }
+    .footer { text-align: center; margin-top: 32px; font-size: 11px; color: var(--muted); }
+    .footer a { color: var(--accent); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="hero">
+    <div class="icon">🤖</div>
+    <h1>Local AI Agent</h1>
+    <p>Download a single binary. Run it. Get a local AI with GPU support.</p>
+  </div>
+
+  <div class="card">
+    <div class="detected">
+      <div class="label">Detected platform</div>
+      <div class="platform" id="detected-platform">Detecting...</div>
+    </div>
+    <a class="btn-download" id="btn-download" href="#" onclick="return false;">
+      ↓ Download for your platform
+    </a>
+  </div>
+
+  <div class="card">
+    <h3>All Downloads</h3>
+    <div class="all-downloads" id="all-downloads"></div>
+  </div>
+
+  <div class="card">
+    <h3>Quick Start</h3>
+    <div class="instructions" id="instructions">
+      <p>1. Download the binary for your platform</p>
+      <p>2. Make it executable (Linux/macOS):</p>
+      <pre>chmod +x local-ai-agent-*
+./local-ai-agent-*</pre>
+      <p>3. Open <code>http://localhost:3333</code> in your browser</p>
+      <p style="margin-top:12px;color:var(--muted)">
+        On first run, it will automatically download Ollama and a default model.
+        If you have an NVIDIA GPU, it will use CUDA acceleration automatically.
+      </p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <a href="/">← Back to Dashboard</a> &middot;
+    <a href="https://github.com/patlopes/local-ai-agent" target="_blank">GitHub</a>
+  </div>
+</div>
+
+<script>
+const REPO = 'patlopes/local-ai-agent';
+
+const PLATFORMS = [
+  { os: 'linux',   arch: 'amd64', label: 'Linux',         detail: 'x86_64 (Intel/AMD)' },
+  { os: 'linux',   arch: 'arm64', label: 'Linux',         detail: 'ARM64 (Raspberry Pi, etc.)' },
+  { os: 'darwin',  arch: 'amd64', label: 'macOS',         detail: 'Intel' },
+  { os: 'darwin',  arch: 'arm64', label: 'macOS',         detail: 'Apple Silicon (M1/M2/M3/M4)' },
+  { os: 'windows', arch: 'amd64', label: 'Windows',       detail: 'x86_64 (Intel/AMD)' },
+  { os: 'windows', arch: 'arm64', label: 'Windows',       detail: 'ARM64' },
+];
+
+function detectPlatform() {
+  const ua = navigator.userAgent.toLowerCase();
+  const plat = navigator.platform?.toLowerCase() || '';
+
+  let os = 'linux';
+  if (ua.includes('win') || plat.includes('win')) os = 'windows';
+  else if (ua.includes('mac') || plat.includes('mac')) os = 'darwin';
+
+  // Rough arch detection
+  let arch = 'amd64';
+  if (ua.includes('arm') || ua.includes('aarch64') || plat.includes('arm')) {
+    arch = 'arm64';
+  }
+  // Apple Silicon detection
+  if (os === 'darwin') {
+    // Modern macOS on Apple Silicon will report as arm in some contexts
+    // navigator.userAgentData is more reliable when available
+    try {
+      if (navigator.userAgentData?.platform === 'macOS') {
+        // Most Apple Silicon Macs report arm
+        // Check GPU renderer hint
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl');
+        if (gl) {
+          const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+          const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '';
+          if (renderer.includes('Apple')) arch = 'arm64';
+        }
+      }
+    } catch(e) {}
+  }
+
+  return { os, arch };
+}
+
+function binaryName(os, arch) {
+  let name = `local-ai-agent-${os}-${arch}`;
+  if (os === 'windows') name += '.exe';
+  return name;
+}
+
+function archiveExt(os) {
+  return os === 'windows' ? '.zip' : '.tar.gz';
+}
+
+async function getLatestRelease() {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch(e) {
+    return null;
+  }
+}
+
+function findAsset(release, os, arch) {
+  if (!release?.assets) return null;
+  const ext = archiveExt(os);
+  return release.assets.find(a =>
+    a.name.includes(`${os}-${arch}`) && a.name.endsWith(ext)
+  );
+}
+
+function directDownloadURL(os, arch, version) {
+  const ext = archiveExt(os);
+  return `https://github.com/${REPO}/releases/download/v${version}/local-ai-agent-${version}-${os}-${arch}${ext}`;
+}
+
+async function init() {
+  const detected = detectPlatform();
+  const platformInfo = PLATFORMS.find(p => p.os === detected.os && p.arch === detected.arch);
+  const detectedEl = document.getElementById('detected-platform');
+  const btnEl = document.getElementById('btn-download');
+  const allEl = document.getElementById('all-downloads');
+
+  if (platformInfo) {
+    detectedEl.textContent = `${platformInfo.label} (${platformInfo.detail})`;
+  } else {
+    detectedEl.textContent = `${detected.os}/${detected.arch}`;
+  }
+
+  // Try to get latest release info
+  const release = await getLatestRelease();
+  const version = release?.tag_name?.replace(/^v/, '') || null;
+
+  // Set up main download button
+  if (release) {
+    const asset = findAsset(release, detected.os, detected.arch);
+    if (asset) {
+      btnEl.href = asset.browser_download_url;
+      btnEl.onclick = null;
+      btnEl.textContent = `↓ Download ${platformInfo?.label || detected.os} (v${version})`;
+    } else {
+      btnEl.href = directDownloadURL(detected.os, detected.arch, version);
+      btnEl.onclick = null;
+      btnEl.textContent = `↓ Download ${platformInfo?.label || detected.os} (v${version})`;
+    }
+  } else {
+    btnEl.href = `https://github.com/${REPO}/releases`;
+    btnEl.onclick = null;
+    btnEl.textContent = '↓ View releases on GitHub';
+  }
+
+  // Render all platform downloads
+  allEl.innerHTML = PLATFORMS.map(p => {
+    let url;
+    if (release) {
+      const asset = findAsset(release, p.os, p.arch);
+      url = asset ? asset.browser_download_url : directDownloadURL(p.os, p.arch, version);
+    } else {
+      url = `https://github.com/${REPO}/releases`;
+    }
+    const isCurrent = (p.os === detected.os && p.arch === detected.arch);
+    return `
+      <div class="dl-row" style="${isCurrent ? 'border:1px solid var(--accent);' : ''}">
+        <div class="info">
+          <span class="os-name">${p.label} ${isCurrent ? '← you' : ''}</span>
+          <span class="arch">${p.detail}</span>
+        </div>
+        <a href="${url}"${version ? '' : ' target="_blank"'}>↓ ${version ? 'v' + version : 'GitHub'}</a>
+      </div>
+    `;
+  }).join('');
+}
+
+init();
+</script>
+</body>
+</html>

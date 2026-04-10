@@ -17,6 +17,9 @@ import (
 //go:embed dashboard.html
 var dashboardHTML []byte
 
+//go:embed download.html
+var downloadHTML []byte
+
 // Server is the agent's HTTP server.
 type Server struct {
 	cfg        *config.Config
@@ -132,12 +135,16 @@ func NewServer(cfg *config.Config, om *ollama.Manager, logger *slog.Logger, shut
 
 	// Embedded dashboard UI (served at root)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
+		switch r.URL.Path {
+		case "/":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write(dashboardHTML)
+		case "/download":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write(downloadHTML)
+		default:
 			http.NotFound(w, r)
-			return
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(dashboardHTML)
 	})
 
 	// Apply middleware stack
