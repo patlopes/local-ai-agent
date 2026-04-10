@@ -371,7 +371,17 @@
 </footer>
 
 <script>
-const AGENT_URL = 'http://localhost:3333';
+// When served from the same origin as the agent (e.g. localhost:3333), use relative URLs.
+// When served from a remote host (e.g. chat.patricklopes.cloud), call the local agent.
+const AGENT_URL = (function() {
+  const loc = window.location;
+  // If we're already on the agent (port 3333 or same-origin serves /health), use origin
+  if (loc.port === '3333' || loc.hostname === 'localhost' || loc.hostname === '127.0.0.1') {
+    return loc.origin;
+  }
+  // Remote hosting — try to reach the local agent
+  return 'http://localhost:3333';
+})();
 const AUTH_TOKEN = '';
 
 // Models known to support thinking/reasoning - only these get think:true
