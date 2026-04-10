@@ -1,0 +1,16 @@
+# Ollama binaries (downloaded per platform)
+ollama/ollama
+ollama/ollama.exe
+
+# Build output
+bin/
+dist/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

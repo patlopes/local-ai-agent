@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Local AI Agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --card: #1c2128;
+      --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+      --accent: #58a6ff; --accent-hover: #79c0ff;
+      --success: #3fb950; --error: #f85149; --warn: #d29922;
+      --danger: #da3633; --danger-hover: #f85149;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
+    .container { max-width: 640px; margin: 0 auto; padding: 40px 20px; }
+
+    .hero { text-align: center; margin-bottom: 32px; }
+    .hero .icon { font-size: 48px; margin-bottom: 12px; }
+    .hero h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+    .hero p { color: var(--muted); font-size: 14px; }
+
+    .status-banner {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 20px; border-radius: 12px;
+      background: var(--surface); border: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .status-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      flex-shrink: 0; transition: background 0.3s;
+    }
+    .status-dot.ok { background: var(--success); box-shadow: 0 0 8px #3fb95066; }
+    .status-dot.booting { background: var(--accent); box-shadow: 0 0 8px #58a6ff66; animation: pulse 1.2s infinite; }
+    .status-dot.degraded { background: var(--warn); box-shadow: 0 0 8px #d2992266; }
+    .status-dot.error { background: var(--error); box-shadow: 0 0 8px #f8514966; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .status-text { flex: 1; }
+    .status-text .label { font-size: 14px; font-weight: 600; }
+    .status-text .detail { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px; margin-bottom: 16px;
+    }
+    .card h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Boot steps */
+    .boot-steps { list-style: none; }
+    .boot-step {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid #30363d33;
+      font-size: 13px; transition: opacity 0.3s;
+    }
+    .boot-step:last-child { border-bottom: none; }
+    .boot-step .step-icon {
+      width: 22px; height: 22px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+    }
+    .boot-step .step-body { flex: 1; }
+    .boot-step .step-label { font-weight: 500; }
+    .boot-step .step-detail { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+    .boot-step.pending { opacity: 0.35; }
+    .boot-step.running .step-icon { animation: pulse 1s infinite; }
+    .boot-step.skipped { opacity: 0.25; }
+    .boot-step.skipped .step-label { text-decoration: line-through; }
+
+    .spinner {
+      width: 16px; height: 16px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Info rows */
+    .info-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 0; border-bottom: 1px solid #30363d44; font-size: 13px;
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-row .key { color: var(--muted); }
+    .info-row .val { font-family: var(--mono); font-size: 12px; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .tag.green { background: #3fb95022; color: var(--success); }
+    .tag.red { background: #f8514922; color: var(--error); }
+    .tag.yellow { background: #d2992222; color: var(--warn); }
+
+    .model-list { list-style: none; }
+    .model-list li {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 12px; border-radius: 8px; font-size: 13px;
+      background: var(--card); margin-bottom: 6px;
+    }
+    .model-list li .name { font-family: var(--mono); font-size: 12px; }
+    .model-list li .size { color: var(--muted); font-size: 11px; }
+    .model-list li .model-actions { display: flex; align-items: center; gap: 8px; }
+    .btn-delete {
+      font-family: var(--sans); font-size: 11px; font-weight: 600;
+      padding: 4px 10px; border-radius: 6px; border: 1px solid var(--danger);
+      color: var(--danger); background: transparent; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-delete:hover { background: var(--danger); color: #fff; }
+    .btn-delete:disabled { opacity: 0.4; cursor: not-allowed; }
+    .model-list .empty { color: var(--muted); font-style: italic; text-align: center; padding: 16px; }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+    .btn {
+      font-family: var(--sans); font-size: 13px; font-weight: 600;
+      padding: 10px 20px; border-radius: 8px; border: 1px solid var(--border);
+      cursor: pointer; transition: all 0.15s; background: var(--card); color: var(--text);
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn:active { transform: scale(0.97); }
+    .btn-danger { border-color: var(--danger); color: var(--danger); }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-full { flex: 1; text-align: center; }
+
+    .footer { text-align: center; margin-top: 32px; font-size: 11px; color: var(--muted); }
+    .footer a { color: var(--accent); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* Filter buttons */
+    .filter-btn {
+      font-family: var(--sans); font-size: 11px; font-weight: 600;
+      padding: 5px 12px; border-radius: 16px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer; transition: all 0.15s;
+    }
+    .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+    .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* Library model items */
+    .lib-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; border-radius: 8px;
+      background: var(--card); margin-bottom: 6px; font-size: 13px;
+    }
+    .lib-item .lib-info { flex: 1; min-width: 0; }
+    .lib-item .lib-name { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+    .lib-item .lib-desc { font-size: 11px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lib-item .lib-meta { display: flex; gap: 8px; margin-top: 4px; }
+    .lib-item .lib-tag {
+      font-size: 10px; padding: 1px 6px; border-radius: 8px;
+      background: #30363d; color: var(--muted); font-weight: 500;
+    }
+    .lib-item .lib-action { flex-shrink: 0; }
+    .btn-dl {
+      font-family: var(--sans); font-size: 11px; font-weight: 600;
+      padding: 6px 14px; border-radius: 6px; border: 1px solid var(--accent);
+      color: var(--accent); background: transparent; cursor: pointer;
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .btn-dl:hover { background: var(--accent); color: #fff; }
+    .btn-dl:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-dl.installed { border-color: var(--success); color: var(--success); cursor: default; }
+    .btn-dl.installed:hover { background: transparent; color: var(--success); }
+    .btn-dl.downloading { border-color: var(--warn); color: var(--warn); }
+
+    .progress-bar {
+      width: 100%; height: 3px; background: var(--border);
+      border-radius: 2px; margin-top: 6px; overflow: hidden;
+    }
+    .progress-bar .progress-fill {
+      height: 100%; background: var(--accent); border-radius: 2px;
+      transition: width 0.3s;
+    }
+
+    .pull-detail {
+      font-size: 11px; color: var(--muted); margin-top: 4px;
+      font-family: var(--mono); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .pull-detail.error { color: var(--error); }
+
+    /* Fade-in for sections that appear after boot */
+    .fade-in { animation: fadeIn 0.4s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+    /* Log panel */
+    .log-header {
+      display: flex; justify-content: space-between; align-items: center;
+      cursor: pointer; user-select: none;
+    }
+    .log-header h3 { margin-bottom: 0; }
+    .log-toggle {
+      font-size: 11px; color: var(--accent); background: none; border: none;
+      cursor: pointer; font-family: var(--sans); font-weight: 600;
+    }
+    .log-toolbar {
+      display: flex; gap: 6px; align-items: center; margin-bottom: 10px; margin-top: 10px;
+    }
+    .log-toolbar .log-filter {
+      flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--card); color: var(--text); font-family: var(--sans); font-size: 12px;
+      outline: none;
+    }
+    .log-toolbar .log-filter:focus { border-color: var(--accent); }
+    .log-level-btn {
+      font-family: var(--mono); font-size: 10px; font-weight: 700;
+      padding: 3px 8px; border-radius: 10px; border: 1px solid var(--border);
+      background: transparent; cursor: pointer; transition: all 0.15s;
+    }
+    .log-level-btn.active { border-color: currentColor; }
+    .log-level-btn[data-level="DEBUG"] { color: var(--muted); }
+    .log-level-btn[data-level="INFO"] { color: var(--accent); }
+    .log-level-btn[data-level="WARN"] { color: var(--warn); }
+    .log-level-btn[data-level="ERROR"] { color: var(--error); }
+    .log-level-btn.active[data-level="DEBUG"] { background: #8b949e18; }
+    .log-level-btn.active[data-level="INFO"] { background: #58a6ff18; }
+    .log-level-btn.active[data-level="WARN"] { background: #d2992218; }
+    .log-level-btn.active[data-level="ERROR"] { background: #f8514918; }
+    .log-area {
+      background: #010409; border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px; max-height: 350px; overflow-y: auto;
+      font-family: var(--mono); font-size: 11px; line-height: 1.7;
+    }
+    .log-line { white-space: pre-wrap; word-break: break-all; padding: 1px 0; }
+    .log-line .log-ts { color: #484f58; }
+    .log-line .log-lvl { font-weight: 700; display: inline-block; min-width: 44px; }
+    .log-line .log-lvl.DEBUG { color: var(--muted); }
+    .log-line .log-lvl.INFO { color: var(--accent); }
+    .log-line .log-lvl.WARN { color: var(--warn); }
+    .log-line .log-lvl.ERROR { color: var(--error); }
+    .log-line .log-msg { color: var(--text); }
+    .log-line .log-attrs { color: #484f58; }
+    .log-count {
+      font-size: 10px; color: var(--muted); background: var(--card);
+      padding: 1px 6px; border-radius: 8px; margin-left: 6px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="hero">
+    <div class="icon">🧠</div>
+    <h1>Local AI Agent</h1>
+    <p>Your private AI runtime — running on this machine</p>
+  </div>
+
+  <!-- Status banner -->
+  <div class="status-banner">
+    <div class="status-dot booting" id="status-dot"></div>
+    <div class="status-text">
+      <div class="label" id="status-label">Starting up...</div>
+      <div class="detail" id="status-detail">Initializing agent components</div>
+    </div>
+  </div>
+
+  <!-- Boot progress card (visible during boot) -->
+  <div class="card" id="boot-card">
+    <h3>Boot Sequence</h3>
+    <ul class="boot-steps" id="boot-steps"></ul>
+  </div>
+
+  <!-- Info card (shown after ready) -->
+  <div class="card" id="info-card" style="display:none">
+    <h3>Agent Info</h3>
+    <div class="info-row"><span class="key">API</span><span class="val" id="info-api">—</span></div>
+    <div class="info-row"><span class="key">Ollama</span><span class="val" id="info-ollama">—</span></div>
+    <div class="info-row"><span class="key">Default Model</span><span class="val" id="info-model">—</span></div>
+    <div class="info-row"><span class="key">Version</span><span class="val" id="info-version">—</span></div>
+    <div class="info-row"><span class="key">Data Path</span><span class="val" style="font-size:11px" id="info-data-path">—</span></div>
+    <div class="info-row"><span class="key">Data Size</span><span class="val" id="info-data-size">—</span></div>
+  </div>
+
+  <!-- System/GPU card (shown after ready) -->
+  <div class="card" id="system-card" style="display:none">
+    <h3>System</h3>
+    <div class="info-row"><span class="key">CPU Cores</span><span class="val" id="sys-cpu">—</span></div>
+    <div class="info-row"><span class="key">GPU</span><span class="val" id="sys-gpu">—</span></div>
+    <div class="info-row"><span class="key">VRAM</span><span class="val" id="sys-vram" style="display:none">—</span></div>
+    <div class="info-row" id="sys-vram-row" style="display:none"><span class="key">VRAM Used</span><span class="val" id="sys-vram-used">—</span></div>
+    <div class="info-row" id="sys-gpu-util-row" style="display:none"><span class="key">GPU Usage</span><span class="val" id="sys-gpu-util">—</span></div>
+    <div class="info-row" id="sys-driver-row" style="display:none"><span class="key">Driver</span><span class="val" id="sys-driver">—</span></div>
+    <div class="info-row"><span class="key">Inference</span><span class="val" id="sys-inference">—</span></div>
+    <div class="info-row"><span class="key">Runner Libs</span><span class="val" id="sys-libs">—</span></div>
+  </div>
+
+  <!-- Models card (shown after ready) -->
+  <div class="card" id="models-card" style="display:none">
+    <h3>Installed Models</h3>
+    <ul class="model-list" id="model-list">
+      <li class="empty">Loading...</li>
+    </ul>
+  </div>
+
+  <!-- Model Library (shown after ready) -->
+  <div class="card" id="library-card" style="display:none">
+    <h3>Model Library</h3>
+    <input type="text" id="library-search" placeholder="Search models..." style="
+      width:100%;padding:9px 14px;border-radius:8px;border:1px solid var(--border);
+      background:var(--card);color:var(--text);font-family:var(--sans);font-size:13px;
+      margin-bottom:12px;outline:none;
+    " oninput="renderLibrary()" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+    <div id="library-filters" style="margin-bottom:14px;display:flex;gap:6px;flex-wrap:wrap">
+      <button class="filter-btn active" data-cat="all">All</button>
+      <button class="filter-btn" data-cat="small">Small</button>
+      <button class="filter-btn" data-cat="medium">Medium</button>
+      <button class="filter-btn" data-cat="large">Large</button>
+      <button class="filter-btn" data-cat="code">Code</button>
+      <button class="filter-btn" data-cat="embedding">Embedding</button>
+    </div>
+    <ul class="model-list" id="library-list">
+      <li class="empty">Loading catalog...</li>
+    </ul>
+    <div style="margin-top:14px">
+      <div style="display:flex;gap:8px">
+        <input type="text" id="custom-model-input" placeholder="Or pull any model by name, e.g. phi3:mini" style="
+          flex:1;padding:9px 14px;border-radius:8px;border:1px solid var(--border);
+          background:var(--card);color:var(--text);font-family:var(--mono);font-size:12px;outline:none;
+        " onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"
+          onkeydown="if(event.key==='Enter')pullCustomModel()">
+        <button class="btn" onclick="pullCustomModel()" id="btn-custom-pull" style="white-space:nowrap">↓ Pull</button>
+      </div>
+      <div id="custom-pull-status" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;background:var(--card);font-size:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div class="spinner" id="custom-pull-spinner"></div>
+          <span id="custom-pull-label" style="font-family:var(--mono);font-weight:600"></span>
+        </div>
+        <div id="custom-pull-detail" style="color:var(--muted);font-size:11px;margin-bottom:6px"></div>
+        <div class="progress-bar" id="custom-pull-progress"><div class="progress-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="card">
+    <h3>Actions</h3>
+    <div class="btn-row">
+      <button class="btn btn-danger btn-full" id="btn-shutdown">⏻ Shutdown Agent</button>
+    </div>
+  </div>
+
+  <!-- Live Logs -->
+  <div class="card" id="logs-card">
+    <div class="log-header" onclick="toggleLogs()">
+      <h3>Live Logs <span class="log-count" id="log-count">0</span></h3>
+      <button class="log-toggle" id="log-toggle-btn">▼ Show</button>
+    </div>
+    <div id="log-panel" style="display:none">
+      <div class="log-toolbar">
+        <input type="text" class="log-filter" id="log-filter" placeholder="Filter logs..." oninput="filterLogs()">
+        <button class="log-level-btn active" data-level="DEBUG" onclick="toggleLevel(this)">DBG</button>
+        <button class="log-level-btn active" data-level="INFO" onclick="toggleLevel(this)">INF</button>
+        <button class="log-level-btn active" data-level="WARN" onclick="toggleLevel(this)">WRN</button>
+        <button class="log-level-btn active" data-level="ERROR" onclick="toggleLevel(this)">ERR</button>
+        <button class="btn" style="padding:4px 10px;font-size:11px" onclick="clearLogs()">Clear</button>
+      </div>
+      <div class="log-area" id="log-area"></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    All data stays on your machine &middot; <a href="https://github.com/patlopes/local-ai-agent" target="_blank">GitHub</a>
+  </div>
+
+</div>
+
+<script>
+const BASE = window.location.origin;
+
+const $ = id => document.getElementById(id);
+const statusDot = $('status-dot');
+const statusLabel = $('status-label');
+const statusDetail = $('status-detail');
+const bootCard = $('boot-card');
+const bootStepsEl = $('boot-steps');
+const infoCard = $('info-card');
+const modelsCard = $('models-card');
+const libraryCard = $('library-card');
+const libraryList = $('library-list');
+const infoApi = $('info-api');
+const infoOllama = $('info-ollama');
+const infoModel = $('info-model');
+const infoVersion = $('info-version');
+const modelList = $('model-list');
+const btnShutdown = $('btn-shutdown');
+
+let isReady = false;
+let pollTimer = null;
+
+function setStatus(state, label, detail) {
+  statusDot.className = 'status-dot ' + state;
+  statusLabel.textContent = label;
+  statusDetail.textContent = detail;
+}
+
+const stepIcons = {
+  pending: '<span style="color:var(--muted)">○</span>',
+  running: '<div class="spinner"></div>',
+  done: '<span style="color:var(--success)">✓</span>',
+  error: '<span style="color:var(--error)">✗</span>',
+  skipped: '<span style="color:var(--muted)">–</span>',
+};
+
+function renderBootSteps(steps) {
+  bootStepsEl.innerHTML = steps.map(s => `
+    <li class="boot-step ${s.status}">
+      <div class="step-icon">${stepIcons[s.status] || stepIcons.pending}</div>
+      <div class="step-body">
+        <div class="step-label">${s.label}</div>
+        ${s.detail ? `<div class="step-detail">${s.detail}</div>` : ''}
+      </div>
+    </li>
+  `).join('');
+}
+
+function handleBootData(data) {
+  renderBootSteps(data.steps);
+
+  if (data.ready) {
+    isReady = true;
+    setStatus('ok', 'Running', 'Agent is fully operational');
+    // Transition to normal view
+    setTimeout(() => {
+      bootCard.style.display = 'none';
+      infoCard.style.display = '';
+      infoCard.classList.add('fade-in');
+      const sysCard = $('system-card');
+      sysCard.style.display = '';
+      sysCard.classList.add('fade-in');
+      modelsCard.style.display = '';
+      modelsCard.classList.add('fade-in');
+      libraryCard.style.display = '';
+      libraryCard.classList.add('fade-in');
+      startPolling();
+      loadCatalog();
+      checkActivePulls();
+      fetchSystemInfo();
+    }, 1200);
+  } else {
+    // Find the currently running step for the status bar
+    const running = data.steps.find(s => s.status === 'running');
+    const errStep = data.steps.find(s => s.status === 'error');
+    if (errStep) {
+      setStatus('degraded', 'Issue Detected', errStep.detail || errStep.label);
+    } else if (running) {
+      setStatus('booting', 'Starting...', running.label);
+    }
+  }
+}
+
+// -- SSE boot status stream --
+function connectBootSSE() {
+  const evtSrc = new EventSource(`${BASE}/boot-status`);
+
+  evtSrc.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      handleBootData(data);
+      if (data.ready) {
+        evtSrc.close();
+      }
+    } catch (err) {
+      console.warn('Boot SSE parse error:', err);
+    }
+  };
+
+  evtSrc.onerror = () => {
+    // If SSE fails, fall back to polling
+    evtSrc.close();
+    if (!isReady) {
+      setTimeout(pollBootStatus, 1000);
+    }
+  };
+}
+
+async function pollBootStatus() {
+  if (isReady) return;
+  try {
+    const res = await fetch(`${BASE}/boot-status`);
+    const data = await res.json();
+    handleBootData(data);
+    if (!data.ready) {
+      setTimeout(pollBootStatus, 1000);
+    }
+  } catch {
+    setTimeout(pollBootStatus, 2000);
+  }
+}
+
+// -- Normal operation polling (after boot) --
+function formatSize(bytes) {
+  if (!bytes) return '—';
+  const gb = bytes / (1024 * 1024 * 1024);
+  if (gb >= 1) return gb.toFixed(1) + ' GB';
+  return (bytes / (1024 * 1024)).toFixed(0) + ' MB';
+}
+
+function tag(text, color) {
+  return `<span class="tag ${color}">${text}</span>`;
+}
+
+async function refresh() {
+  try {
+    const res = await fetch(`${BASE}/health`);
+    const health = await res.json();
+
+    btnShutdown.disabled = false;
+    infoApi.textContent = BASE;
+    infoModel.textContent = health.default_model || '—';
+    infoVersion.textContent = health.version || '—';
+
+    if (health.ollama_ready) {
+      infoOllama.innerHTML = tag('running', 'green');
+      setStatus('ok', 'Running', 'Agent and Ollama are ready');
+
+      const modelsRes = await fetch(`${BASE}/models`);
+      const modelsData = await modelsRes.json();
+      installedNames = new Set();
+      if (modelsData?.models?.length > 0) {
+        modelsData.models.forEach(m => {
+          installedNames.add(m.name);
+          // Also add base name without tag for matching
+          const base = m.name.split(':')[0];
+          installedNames.add(base);
+        });
+        modelList.innerHTML = modelsData.models.map(m =>
+          `<li>
+            <span class="name">${m.name}</span>
+            <div class="model-actions">
+              <span class="size">${formatSize(m.size)}</span>
+              <button class="btn-delete" onclick="deleteModel('${m.name}')" title="Delete model">✕</button>
+            </div>
+          </li>`
+        ).join('');
+      } else {
+        modelList.innerHTML = '<li class="empty">No models installed</li>';
+      }
+      renderLibrary();
+    } else {
+      infoOllama.innerHTML = tag('starting', 'yellow');
+      setStatus('degraded', 'Starting', 'Ollama is initializing...');
+    }
+  } catch {
+    setStatus('error', 'Agent Offline', 'Process has stopped');
+    btnShutdown.disabled = true;
+    // Clear polling since agent is gone
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+}
+
+function startPolling() {
+  refresh();
+  pollTimer = setInterval(refresh, 5000);
+}
+
+// -- System Info --
+async function fetchSystemInfo() {
+  try {
+    const res = await fetch(`${BASE}/system`);
+    const sys = await res.json();
+
+    $('sys-cpu').textContent = sys.cpu_cores + ' cores';
+    $('info-data-path').textContent = sys.data_dir;
+    $('info-data-size').textContent = sys.data_size_mb >= 1024
+      ? (sys.data_size_mb / 1024).toFixed(1) + ' GB'
+      : sys.data_size_mb + ' MB';
+
+    if (sys.gpu && sys.gpu.available) {
+      $('sys-gpu').innerHTML = `<span class="tag green">${sys.gpu.name}</span>`;
+      if (sys.gpu.vram) {
+        const vramEl = $('sys-vram');
+        vramEl.textContent = sys.gpu.vram;
+        vramEl.parentElement.style.display = '';
+        vramEl.style.display = '';
+      }
+      if (sys.gpu.vram_used) {
+        $('sys-vram-used').textContent = sys.gpu.vram_used;
+        $('sys-vram-row').style.display = '';
+      }
+      if (sys.gpu.utilization) {
+        $('sys-gpu-util').textContent = sys.gpu.utilization;
+        $('sys-gpu-util-row').style.display = '';
+      }
+      if (sys.gpu.driver) {
+        $('sys-driver').textContent = sys.gpu.driver;
+        $('sys-driver-row').style.display = '';
+      }
+      $('sys-inference').innerHTML = '<span class="tag green">GPU</span>';
+    } else {
+      $('sys-gpu').innerHTML = '<span class="tag yellow">Not detected</span>';
+      $('sys-inference').innerHTML = '<span class="tag yellow">CPU only</span>';
+    }
+
+    $('sys-libs').innerHTML = sys.ollama_libs
+      ? '<span class="tag green">Available</span>'
+      : '<span class="tag yellow">Not found</span>';
+  } catch (err) {
+    console.warn('Failed to fetch system info:', err);
+  }
+}
+
+// -- Model library --
+let catalog = [];
+let installedNames = new Set();
+let activeFilter = 'all';
+let downloading = {}; // modelName -> { percent, status, speed, detail }
+let pullPollTimer = null;
+
+async function deleteModel(name) {
+  if (!confirm(`Delete model "${name}"?\nThis will free disk space but you'll need to re-download it to use it again.`)) return;
+  try {
+    const res = await fetch(`${BASE}/models/delete`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: name }),
+    });
+    if (res.ok) {
+      await refresh();
+      renderLibrary();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      alert('Delete failed: ' + (data.error || res.statusText));
+    }
+  } catch (err) {
+    alert('Delete failed: ' + err.message);
+  }
+}
+
+async function loadCatalog() {
+  try {
+    const res = await fetch(`${BASE}/models/available`);
+    const data = await res.json();
+    catalog = data.models || [];
+    renderLibrary();
+  } catch (e) {
+    libraryList.innerHTML = '<li class="empty">Failed to load catalog</li>';
+  }
+}
+
+function renderLibrary() {
+  const query = (document.getElementById('library-search')?.value || '').toLowerCase();
+  let filtered = activeFilter === 'all' ? catalog : catalog.filter(m => m.category === activeFilter);
+  if (query) {
+    filtered = filtered.filter(m =>
+      m.name.toLowerCase().includes(query) ||
+      m.description.toLowerCase().includes(query) ||
+      m.category.toLowerCase().includes(query) ||
+      m.params.toLowerCase().includes(query)
+    );
+  }
+  if (filtered.length === 0) {
+    libraryList.innerHTML = '<li class="empty">No models in this category</li>';
+    return;
+  }
+  libraryList.innerHTML = filtered.map(m => {
+    const installed = installedNames.has(m.name) || installedNames.has(m.name.split(':')[0]);
+    const isDownloading = downloading[m.name];
+    let btnClass = 'btn-dl';
+    let btnText = '↓ Pull';
+    let btnDisabled = '';
+    if (installed) { btnClass += ' installed'; btnText = '✓ Installed'; btnDisabled = 'disabled'; }
+    else if (isDownloading) { btnClass += ' downloading'; btnText = '⏳ Pulling...'; btnDisabled = 'disabled'; }
+    return `<li class="lib-item" data-cat="${m.category}">
+      <div class="lib-info">
+        <div class="lib-name">${m.name}</div>
+        <div class="lib-desc">${m.description}</div>
+        <div class="lib-meta">
+          <span class="lib-tag">${m.params}</span>
+          <span class="lib-tag">${m.size}</span>
+          <span class="lib-tag">${m.category}</span>
+        </div>
+        <div class="progress-bar" id="prog-${CSS.escape(m.name)}" style="display:none"><div class="progress-fill" style="width:0%"></div></div>
+      </div>
+      <div class="lib-action">
+        <button class="${btnClass}" ${btnDisabled} onclick="pullModel('${m.name}')">${btnText}</button>
+      </div>
+    </li>`;
+  }).join('');
+}
+
+async function pullModel(name) {
+  if (downloading[name]) return;
+  downloading[name] = { percent: 0, status: 'starting', detail: 'Connecting...' };
+  renderLibrary();
+  startPullPolling();
+
+  try {
+    const res = await fetch(`${BASE}/models/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: name }),
+    });
+    // Just consume the stream to keep the connection alive
+    const reader = res.body.getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+    // Server marks it done, polling will pick it up
+    await refresh();
+  } catch (err) {
+    console.error('Pull failed:', err);
+    downloading[name] = { percent: 0, status: 'error', error: err.message };
+    renderLibrary();
+  }
+}
+
+// Poll server for active pull progress (survives page refresh)
+async function pollPullProgress() {
+  try {
+    const res = await fetch(`${BASE}/models/pulling`);
+    const data = await res.json();
+    const pulls = data.pulls || [];
+
+    // Update downloading state from server
+    const serverPulls = new Set();
+    for (const p of pulls) {
+      serverPulls.add(p.model);
+      const dlMB = p.completed ? (p.completed / (1024*1024)).toFixed(0) : '0';
+      const totMB = p.total ? (p.total / (1024*1024)).toFixed(0) : '?';
+      let detail = p.detail || p.status;
+      if (p.total > 0 && p.completed > 0) {
+        detail = `${p.detail || 'Downloading'} \u2014 ${dlMB}/${totMB} MB`;
+      }
+      downloading[p.model] = {
+        percent: p.percent || 0,
+        status: p.status,
+        speed: p.speed || '',
+        detail: detail,
+        error: p.error || '',
+      };
+    }
+
+    // Clean up finished/gone pulls
+    for (const name of Object.keys(downloading)) {
+      if (!serverPulls.has(name)) {
+        // Server no longer tracking — it's done or cleaned up
+        if (downloading[name].status !== 'error') {
+          delete downloading[name];
+        }
+      }
+    }
+
+    renderLibrary();
+
+    // Keep polling as long as there are active pulls
+    if (pulls.some(p => p.status !== 'done' && p.status !== 'error')) {
+      return true; // still active
+    }
+    // One final refresh to update installed list
+    if (pulls.length > 0) {
+      await refresh();
+      renderLibrary();
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function startPullPolling() {
+  if (pullPollTimer) return;
+  pullPollTimer = setInterval(async () => {
+    const active = await pollPullProgress();
+    if (!active) {
+      clearInterval(pullPollTimer);
+      pullPollTimer = null;
+    }
+  }, 800);
+}
+
+// On page load, check for active pulls (handles refresh)
+async function checkActivePulls() {
+  try {
+    const res = await fetch(`${BASE}/models/pulling`);
+    const data = await res.json();
+    if (data.pulls?.length > 0) {
+      for (const p of data.pulls) {
+        downloading[p.model] = {
+          percent: p.percent || 0,
+          status: p.status,
+          speed: p.speed || '',
+          detail: p.detail || p.status,
+          error: p.error || '',
+        };
+      }
+      renderLibrary();
+      startPullPolling();
+    }
+  } catch {}
+}
+
+// Filter buttons
+document.getElementById('library-filters').addEventListener('click', (e) => {
+  const btn = e.target.closest('.filter-btn');
+  if (!btn) return;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeFilter = btn.dataset.cat;
+  renderLibrary();
+});
+
+// Pull any model by name (with inline progress)
+async function pullCustomModel() {
+  const input = document.getElementById('custom-model-input');
+  const name = (input.value || '').trim();
+  if (!name) return;
+
+  const statusBox = document.getElementById('custom-pull-status');
+  const labelEl = document.getElementById('custom-pull-label');
+  const detailEl = document.getElementById('custom-pull-detail');
+  const spinnerEl = document.getElementById('custom-pull-spinner');
+  const progBar = document.getElementById('custom-pull-progress');
+  const progFill = progBar.querySelector('.progress-fill');
+  const btn = document.getElementById('btn-custom-pull');
+
+  // Show progress UI
+  statusBox.style.display = '';
+  labelEl.textContent = name;
+  detailEl.textContent = 'Connecting...';
+  progFill.style.width = '0%';
+  spinnerEl.style.display = '';
+  btn.disabled = true;
+  btn.textContent = '⏳ Pulling...';
+  input.disabled = true;
+
+  try {
+    const res = await fetch(`${BASE}/models/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: name }),
+    });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const j = JSON.parse(line);
+          if (j.status) detailEl.textContent = j.status;
+          if (j.total && j.completed) {
+            const pct = Math.round((j.completed / j.total) * 100);
+            progFill.style.width = pct + '%';
+            const dlMB = (j.completed / (1024*1024)).toFixed(0);
+            const totMB = (j.total / (1024*1024)).toFixed(0);
+            detailEl.textContent = `${j.status || 'Downloading'} — ${dlMB}/${totMB} MB (${pct}%)`;
+          }
+          if (j.error) {
+            detailEl.textContent = '❌ ' + j.error;
+            detailEl.style.color = 'var(--error)';
+          }
+        } catch {}
+      }
+    }
+
+    // Success
+    spinnerEl.style.display = 'none';
+    detailEl.textContent = '✓ Done!';
+    detailEl.style.color = 'var(--success)';
+    progFill.style.width = '100%';
+    input.value = '';
+    await refresh();
+    renderLibrary();
+    setTimeout(() => {
+      statusBox.style.display = 'none';
+      detailEl.style.color = '';
+    }, 3000);
+  } catch (err) {
+    spinnerEl.style.display = 'none';
+    detailEl.textContent = '❌ Pull failed: ' + err.message;
+    detailEl.style.color = 'var(--error)';
+    setTimeout(() => {
+      statusBox.style.display = 'none';
+      detailEl.style.color = '';
+    }, 5000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↓ Pull';
+    input.disabled = false;
+  }
+}
+
+// -- Shutdown --
+btnShutdown.addEventListener('click', async () => {
+  if (!confirm('Shut down the Local AI Agent?\nThis will stop Ollama and the API server.')) return;
+  try {
+    await fetch(`${BASE}/shutdown`, { method: 'POST' });
+    setStatus('error', 'Shutting Down', 'Agent is stopping...');
+    btnShutdown.disabled = true;
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  } catch (err) {
+    console.error('Shutdown failed:', err);
+  }
+});
+
+// -- Live Logs --
+const logArea = $('log-area');
+const logCountEl = $('log-count');
+let logEntries = [];
+let logsPanelOpen = false;
+let enabledLevels = new Set(['DEBUG', 'INFO', 'WARN', 'ERROR']);
+let logEvtSrc = null;
+
+function toggleLogs() {
+  logsPanelOpen = !logsPanelOpen;
+  $('log-panel').style.display = logsPanelOpen ? '' : 'none';
+  $('log-toggle-btn').textContent = logsPanelOpen ? '▲ Hide' : '▼ Show';
+  if (logsPanelOpen) renderLogs();
+}
+
+function toggleLevel(btn) {
+  const lvl = btn.dataset.level;
+  if (enabledLevels.has(lvl)) {
+    enabledLevels.delete(lvl);
+    btn.classList.remove('active');
+  } else {
+    enabledLevels.add(lvl);
+    btn.classList.add('active');
+  }
+  renderLogs();
+}
+
+function clearLogs() {
+  logEntries = [];
+  logCountEl.textContent = '0';
+  logArea.innerHTML = '';
+}
+
+function filterLogs() {
+  renderLogs();
+}
+
+function formatLogTime(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('en-GB', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  } catch { return ''; }
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderLogEntry(e) {
+  const ts = formatLogTime(e.time);
+  let attrs = '';
+  if (e.attrs && Object.keys(e.attrs).length > 0) {
+    attrs = ' ' + Object.entries(e.attrs).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ');
+  }
+  return `<div class="log-line"><span class="log-ts">${ts}</span> <span class="log-lvl ${e.level}">${e.level}</span> <span class="log-msg">${escapeHtml(e.msg)}</span><span class="log-attrs">${escapeHtml(attrs)}</span></div>`;
+}
+
+function renderLogs() {
+  const query = ($('log-filter')?.value || '').toLowerCase();
+  const filtered = logEntries.filter(e => {
+    if (!enabledLevels.has(e.level)) return false;
+    if (query) {
+      const text = (e.msg + ' ' + JSON.stringify(e.attrs || {})).toLowerCase();
+      if (!text.includes(query)) return false;
+    }
+    return true;
+  });
+  logArea.innerHTML = filtered.map(renderLogEntry).join('');
+  logArea.scrollTop = logArea.scrollHeight;
+}
+
+function addLogEntry(entry) {
+  logEntries.push(entry);
+  // Cap at 500
+  if (logEntries.length > 500) logEntries = logEntries.slice(-400);
+  logCountEl.textContent = logEntries.length;
+
+  if (logsPanelOpen) {
+    // Append directly if visible and matches filters
+    const query = ($('log-filter')?.value || '').toLowerCase();
+    if (!enabledLevels.has(entry.level)) return;
+    if (query) {
+      const text = (entry.msg + ' ' + JSON.stringify(entry.attrs || {})).toLowerCase();
+      if (!text.includes(query)) return;
+    }
+    logArea.insertAdjacentHTML('beforeend', renderLogEntry(entry));
+    // Auto-scroll if near bottom
+    if (logArea.scrollHeight - logArea.scrollTop - logArea.clientHeight < 80) {
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+  }
+}
+
+function connectLogSSE() {
+  logEvtSrc = new EventSource(`${BASE}/logs`);
+  logEvtSrc.onmessage = (e) => {
+    try {
+      const entry = JSON.parse(e.data);
+      addLogEntry(entry);
+    } catch {}
+  };
+  logEvtSrc.onerror = () => {
+    logEvtSrc.close();
+    // Reconnect after 3s
+    setTimeout(connectLogSSE, 3000);
+  };
+}
+
+// -- Start --
+connectBootSSE();
+connectLogSSE();
+</script>
+</body>
+</html>
