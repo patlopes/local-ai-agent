@@ -1,78 +1,94 @@
 # Local AI Agent
 
-A production-ready local AI agent that runs on your machine, embeds Ollama, and exposes a secure HTTP API for browser-based frontends.
+Run AI locally with a single binary. No setup, no cloud, no accounts.
 
-## Architecture
+Local AI Agent is a self-contained desktop application that downloads and manages [Ollama](https://ollama.com) behind the scenes, gives you a browser-based dashboard to chat, manage models, and monitor your system — all from one executable.
 
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Browser UI    │────▶│  Local AI Agent   │────▶│     Ollama      │
-│  (any website)  │◀────│  localhost:3333   │◀────│ localhost:11434  │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-                         CORS · Auth · Proxy      Managed subprocess
-```
+## Features
 
-**Key design decisions:**
-
-- **Go single binary** — zero runtime dependencies, compiles for all platforms
-- **Ollama embedded** — bundled as a subprocess, users never interact with it directly
-- **Proxy architecture** — Ollama is never exposed to the browser; the agent validates, enriches, and forwards all requests
-- **Streaming first** — all LLM responses use NDJSON streaming for real-time token delivery
-- **Security by default** — CORS restricted to configured origins, optional auth token
+- **Zero setup** — download one binary, run it, done. Ollama is downloaded automatically on first launch.
+- **Built-in dashboard** — model library, live chat, system monitor, and logs at `http://localhost:3333`.
+- **GPU acceleration** — automatically detects NVIDIA GPUs and uses CUDA. Falls back to CPU if no GPU is found.
+- **Model library** — browse and download from 24+ curated models (Llama, Gemma, Qwen, Phi, DeepSeek, Mistral, and more).
+- **Thinking/reasoning** — models like Qwen3, QwQ, and DeepSeek-R1 show their chain-of-thought reasoning alongside answers.
+- **Cross-platform** — runs on Linux, macOS (Intel + Apple Silicon), and Windows.
+- **Streaming chat** — real-time token-by-token responses via NDJSON streaming.
+- **Clean shutdown** — unloads models and frees GPU VRAM before exiting.
 
 ## Quick Start
 
-### 1. Download Ollama binary
+### Download
+
+Grab the latest binary for your platform from the [Releases](https://github.com/patlopes/local-ai-agent/releases) page, or visit the built-in download page at `/download` when the agent is running.
+
+### Run
 
 ```bash
-make download-ollama
-# or manually:
-./scripts/download-ollama.sh
+# Linux / macOS
+chmod +x local-ai-agent-*
+./local-ai-agent-*
+
+# Windows
+local-ai-agent-windows-amd64.exe
 ```
 
-### 2. Run the agent
+That's it. The agent will:
 
-```bash
-make run
-# or:
-go run .
+1. Download Ollama (if not already present)
+2. Start it as a managed subprocess
+3. Pull the default model (`gemma3:1b`)
+4. Open your browser to `http://localhost:3333`
+
+Everything is stored in `~/.local-ai-agent/` (binary, models, GPU libraries).
+
+### Flags
+
+```
+--no-browser    Don't open the browser on startup
 ```
 
-The agent will:
-1. Start Ollama as a subprocess
-2. Wait for it to be healthy
-3. Ensure the default model (`gemma3:1b`) is downloaded
-4. Start the HTTP API on `http://localhost:3333`
+## Dashboard
 
-### 3. Open the frontend
+The embedded dashboard at `http://localhost:3333` includes:
 
-Open `frontend/index.html` in your browser, or integrate using the JS client.
+- **Chat** — conversation interface with markdown rendering, code highlighting, and thinking/reasoning display
+- **Model Library** — browse, search, filter, download, and delete models
+- **System Info** — GPU detection, CPU cores, disk usage, data directory
+- **Live Logs** — real-time server log stream
+- **Boot Progress** — SSE-based startup status
 
-## API Endpoints
+A separate full-page chat UI is also available at `frontend/index.html`.
 
-| Method | Path               | Description                          |
-|--------|--------------------|--------------------------------------|
-| GET    | `/health`          | Agent & Ollama status                |
-| POST   | `/chat`            | Chat completion (streaming NDJSON)   |
-| POST   | `/generate`        | Text generation (streaming NDJSON)   |
-| GET    | `/models`          | List available models                |
-| POST   | `/models/download` | Download/pull a model                |
+## API
+
+All endpoints are served on `http://localhost:3333`:
+
+| Method | Path                | Description                              |
+|--------|---------------------|------------------------------------------|
+| GET    | `/health`           | Agent and Ollama status                  |
+| POST   | `/chat`             | Chat completion (streaming NDJSON)       |
+| POST   | `/generate`         | Text generation (streaming NDJSON)       |
+| GET    | `/models`           | List downloaded models                   |
+| POST   | `/models/download`  | Pull a model (streaming progress)        |
+| POST   | `/models/delete`    | Delete a downloaded model                |
+| GET    | `/models/available` | Curated model catalog                    |
+| GET    | `/models/pulling`   | Active download progress                 |
+| GET    | `/system`           | System info (GPU, CPU, disk)             |
+| GET    | `/logs`             | Live log stream (SSE)                    |
+| GET    | `/boot-status`      | Boot progress stream (SSE)               |
+| POST   | `/shutdown`         | Graceful shutdown                        |
+| GET    | `/`                 | Dashboard UI                             |
+| GET    | `/download`         | OS-aware download page                   |
 
 ### Examples
 
-**Health check:**
-```bash
-curl http://localhost:3333/health
-```
-
-**Chat (streaming):**
+**Chat:**
 ```bash
 curl -N http://localhost:3333/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "messages": [
-      {"role": "user", "content": "Explain quantum computing in 3 sentences"}
-    ]
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "model": "gemma3:1b"
   }'
 ```
 
@@ -81,192 +97,96 @@ curl -N http://localhost:3333/chat \
 curl http://localhost:3333/models
 ```
 
-**Download a model:**
+**Pull a model:**
 ```bash
 curl -N http://localhost:3333/models/download \
   -H "Content-Type: application/json" \
-  -d '{"model": "llama3.2:1b"}'
+  -d '{"model": "llama3.2:3b"}'
 ```
 
 ## Configuration
 
-All configuration is via environment variables:
+Environment variables (all optional):
 
-| Variable          | Default                                        | Description                          |
-|-------------------|------------------------------------------------|--------------------------------------|
-| `AGENT_PORT`      | `3333`                                         | Port for the agent API               |
-| `OLLAMA_PORT`     | `11434`                                        | Port for Ollama backend              |
-| `ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:3000`   | Comma-separated CORS origins         |
-| `DEFAULT_MODEL`   | `gemma3:1b`                                    | Default LLM model                    |
-| `AUTH_TOKEN`      | *(empty — auth disabled)*                      | Optional auth token                  |
-| `DATA_DIR`        | `~/.local-ai-agent`                            | Data directory for models            |
-| `LOG_LEVEL`       | `info`                                         | Logging: debug, info, warn, error    |
+| Variable        | Default             | Description                       |
+|-----------------|---------------------|-----------------------------------|
+| `AGENT_PORT`    | `3333`              | Port for the agent                |
+| `OLLAMA_PORT`   | `11434`             | Port for Ollama subprocess        |
+| `DEFAULT_MODEL` | `gemma3:1b`         | Model to pull on first run        |
+| `DATA_DIR`      | `~/.local-ai-agent` | Where everything is stored        |
+| `AUTH_TOKEN`    | *(disabled)*        | Optional API auth token           |
+| `LOG_LEVEL`     | `info`              | `debug`, `info`, `warn`, `error`  |
 
-### Enable authentication
+## Building from Source
 
-```bash
-# Generate a token
-./local-ai-agent --gen-token
-# → a1b2c3d4e5f6...
-
-# Run with auth enabled
-AUTH_TOKEN=a1b2c3d4e5f6... ./local-ai-agent
-```
-
-Clients must include `X-Auth-Token: <token>` header on all requests (except `/health`).
-
-## Building
-
-### Current platform
+Requires Go 1.22+.
 
 ```bash
-make build
+# Current platform
+CGO_ENABLED=0 go build -ldflags "-s -w" -trimpath -o local-ai-agent .
+
+# All platforms
+./scripts/build.sh all
 ```
 
-### All platforms
+Outputs go to `bin/` (binaries) and `dist/` (packaged archives).
+
+## Releases
+
+Releases are automated via GitHub Actions. Pushing a tag triggers cross-compilation for all 6 targets:
+
+| Platform             | Architecture |
+|----------------------|--------------|
+| Linux                | amd64, arm64 |
+| macOS                | amd64, arm64 |
+| Windows              | amd64, arm64 |
 
 ```bash
-make build-all
+git tag v1.0.1 && git push origin v1.0.1
 ```
-
-Outputs are in `bin/` and packaged distributions in `dist/`.
-
-### Manual cross-compilation
-
-```bash
-# Linux
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/local-ai-agent-linux-amd64 .
-
-# macOS (Apple Silicon)
-CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o bin/local-ai-agent-darwin-arm64 .
-
-# Windows
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o bin/local-ai-agent-windows-amd64.exe .
-```
-
-## Distribution
-
-For each target platform:
-
-1. Build the agent binary
-2. Download the Ollama binary for that platform:
-   ```bash
-   ./scripts/download-ollama.sh linux amd64
-   ./scripts/download-ollama.sh darwin arm64
-   ./scripts/download-ollama.sh windows amd64
-   ```
-3. Package together:
-   ```
-   local-ai-agent-linux-amd64/
-   ├── local-ai-agent-linux-amd64   # agent binary
-   └── ollama/
-       └── ollama                    # ollama binary
-   ```
-
-The agent looks for `ollama/ollama` (or `ollama/ollama.exe`) relative to its own binary.
-
-## Frontend Integration
-
-### Using the JS SDK
-
-```html
-<script src="agent-client.js"></script>
-<script>
-  const agent = new AgentClient('http://localhost:3333');
-
-  // Check connection
-  const health = await agent.health();
-  console.log('Agent status:', health.status);
-
-  // Chat with streaming
-  await agent.chat(
-    [{ role: 'user', content: 'Hello!' }],
-    'gemma3:1b',
-    (token) => document.body.innerText += token
-  );
-</script>
-```
-
-### Using fetch directly
-
-```javascript
-// Detect agent
-try {
-  const res = await fetch('http://localhost:3333/health');
-  const data = await res.json();
-  console.log('Agent ready:', data.status === 'ok');
-} catch {
-  console.log('Agent not running');
-}
-
-// Chat with streaming
-const response = await fetch('http://localhost:3333/chat', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    messages: [{ role: 'user', content: 'What is 2+2?' }],
-  }),
-});
-
-const reader = response.body.getReader();
-const decoder = new TextDecoder();
-
-while (true) {
-  const { done, value } = await reader.read();
-  if (done) break;
-
-  const text = decoder.decode(value);
-  for (const line of text.split('\n')) {
-    if (!line.trim()) continue;
-    const chunk = JSON.parse(line);
-    if (chunk.message?.content) {
-      process.stdout.write(chunk.message.content); // or append to DOM
-    }
-  }
-}
-```
-
-## Error Handling
-
-The agent handles these failure scenarios:
-
-| Scenario                  | Behavior                                               |
-|---------------------------|--------------------------------------------------------|
-| Ollama binary not found   | Checks PATH as fallback; logs clear error              |
-| Ollama fails to start     | Agent starts in degraded mode; `/health` reports it    |
-| Port 3333 in use          | Exits with clear error; configure via `AGENT_PORT`     |
-| Port 11434 in use         | Reuses existing Ollama instance                        |
-| Model not available       | Auto-downloads on first use                            |
-| No GPU                    | Ollama falls back to CPU automatically                 |
-| Client disconnects        | Streaming aborts cleanly                               |
 
 ## Project Structure
 
 ```
 local-ai-agent/
-├── main.go                     # Entry point, lifecycle orchestration
-├── go.mod
-├── Makefile
-├── config/
-│   └── config.go               # Configuration management
+├── main.go                          # Entry point, lifecycle, signals
+├── config/config.go                 # Environment-based configuration
 ├── internal/
-│   ├── ollama/
-│   │   ├── manager.go          # Ollama subprocess lifecycle
-│   │   └── helpers.go          # JSON utilities
 │   ├── api/
-│   │   ├── server.go           # HTTP server setup
-│   │   ├── handlers.go         # Route handlers
-│   │   └── middleware.go       # CORS, auth, logging
-│   └── proxy/
-│       └── proxy.go            # Request proxying with streaming
-├── frontend/
-│   ├── index.html              # Example chat UI
-│   └── agent-client.js         # JavaScript SDK
-├── scripts/
-│   ├── build.sh                # Cross-platform build
-│   └── download-ollama.sh      # Ollama binary downloader
-└── ollama/                     # Ollama binary (gitignored)
+│   │   ├── server.go                # HTTP server, routes, embedded HTML
+│   │   ├── handlers.go              # API handlers + model catalog
+│   │   ├── middleware.go            # CORS, auth, logging
+│   │   ├── dashboard.html           # Embedded dashboard UI
+│   │   ├── download.html            # OS-aware download page
+│   │   ├── boot_status.go          # Boot progress SSE
+│   │   ├── pull_tracker.go         # Server-side download tracking
+│   │   └── log_stream.go           # Live log streaming
+│   ├── ollama/
+│   │   ├── manager.go              # Ollama subprocess lifecycle
+│   │   ├── download.go             # Ollama binary downloader
+│   │   ├── proc_linux.go           # Linux process groups
+│   │   ├── proc_darwin.go          # macOS process groups
+│   │   ├── proc_windows.go         # Windows process handling
+│   │   └── helpers.go              # JSON utilities
+│   └── proxy/proxy.go              # Streaming request proxy
+├── frontend/index.html              # Standalone chat UI
+├── scripts/build.sh                 # Cross-platform build script
+└── .github/workflows/release.yml    # CI/CD release pipeline
 ```
+
+## How It Works
+
+```
+┌──────────┐     ┌──────────────────┐     ┌─────────┐
+│ Browser  │────▶│ Local AI Agent   │────▶│ Ollama  │
+│          │◀────│ localhost:3333   │◀────│ :11434  │
+└──────────┘     └──────────────────┘     └─────────┘
+                  Single Go binary         Managed subprocess
+                  Dashboard + API          Auto-downloaded
+                  CORS · Auth · Proxy      GPU-accelerated
+```
+
+The agent acts as a proxy — Ollama is never exposed directly. The agent manages its full lifecycle: download, start, health checks, model management, and clean shutdown with GPU memory release.
 
 ## License
 
