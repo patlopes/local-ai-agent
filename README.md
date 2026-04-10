@@ -1,5 +1,13 @@
 # Local AI Agent
 
+[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go&logoColor=white)](https://go.dev)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blueviolet?style=flat)](#releases)
+[![GPU](https://img.shields.io/badge/GPU-CUDA%20Accelerated-76B900?style=flat&logo=nvidia&logoColor=white)](#features)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/patlopes/local-ai-agent?style=flat&color=orange)](https://github.com/patlopes/local-ai-agent/releases)
+
+> **Try it live:** [chat.patricklopes.cloud](https://chat.patricklopes.cloud)
+
 Run AI locally with a single binary. No setup, no cloud, no accounts.
 
 Local AI Agent is a self-contained desktop application that downloads and manages [Ollama](https://ollama.com) behind the scenes, gives you a browser-based dashboard to chat, manage models, and monitor your system — all from one executable.
